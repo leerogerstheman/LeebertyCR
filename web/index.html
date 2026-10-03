@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>LeebertyCR · CRA/CRC 临床试验工作台</title>
+  <meta name="description" content="LeebertyCR 临床试验工作台：辅助临床监查员(CRA)与临床协调员(CRC)理解并执行药物临床试验工作流程的本地化应用：理念课堂、生命周期、岗位手册、核查清单、工作流执行、任务台、模板、法规速查、场景练习与案例学习。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%2312264f'/%3E%3Cstop offset='1' stop-color='%2304070d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='13' fill='url(%23bg)'/%3E%3Ctext x='32' y='46' font-family='Old English Text MT,Georgia,serif' font-size='31' font-weight='700' fill='%23f4f7fa' text-anchor='middle' letter-spacing='1'%3ECR%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="root">
+    <div class="boot-splash" style="display:flex;align-items:center;justify-content:center;min-height:60vh;flex-direction:column">
+      <div class="brand-mark" style="width:56px;height:56px;border-radius:14px;font-size:24px">CR</div>
+      <h1 style="margin-top:14px">LeebertyCR</h1>
+      <p style="color:#5c6b7a">CRA/CRC 临床试验工作台 · 正在加载内容库…</p>
+      <noscript><p><strong>本应用需要启用 JavaScript。</strong></p></noscript>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var pending = [];
+      window.Views = {
+        pending: pending,
+        register: function (name, view) { pending.push([name, view]); },
+      };
+    })();
+  </script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/views/home.js"></script>
+  <script src="/js/views/learn.js"></script>
+  <script src="/js/views/lifecycle.js"></script>
+  <script src="/js/views/handbook.js"></script>
+  <script src="/js/views/checklists.js"></script>
+  <script src="/js/views/workflow.js"></script>
+  <script src="/js/views/subjects.js"></script>
+  <script src="/js/views/documents.js"></script>
+  <script src="/js/views/tasks.js"></script>
+  <script src="/js/views/templates.js"></script>
+  <script src="/js/views/regs.js"></script>
+  <script src="/js/views/quiz.js"></script>
+  <script src="/js/views/cases.js"></script>
+  <script src="/js/views/glossary.js"></script>
+  <script src="/js/views/security.js"></script>
+  <script src="/js/views/about.js"></script>
+  <script src="/js/views/login.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

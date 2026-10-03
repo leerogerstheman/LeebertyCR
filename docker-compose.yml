@@ -1,0 +1,33 @@
+# LeebertyCR 服务端版编排（多人通过浏览器访问同一套记录）
+#
+#   docker compose up -d          启动
+#   docker compose logs -f        查看日志
+#   docker compose down           停止（数据保留在卷里）
+#
+# 注意：容器版仅提供引擎与备用网页界面；原生桌面窗口请在有 Node.js 的 Windows 上双击 LeebertyCR.exe。
+
+services:
+  leebertycr:
+    build: .
+    image: leebertycr:1.0.0
+    container_name: leebertycr
+    restart: unless-stopped
+    ports:
+      - "8816:8816"
+    environment:
+      CRA_PORT: "8816"
+      CRA_HOST: "0.0.0.0"
+      CRA_DATA_DIR: "/app/data"
+      # 首次启动是否创建内置演示账号（生产环境建议设为 0，改用 /api/auth/first-admin 初始化管理员）
+      CRA_BUILTIN_ACCOUNTS: "1"
+    volumes:
+      - leebertycr-data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8816/api/health').then(r=>r.json()).then(h=>process.exit(h&&h.app==='LeebertyCR'?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  leebertycr-data:

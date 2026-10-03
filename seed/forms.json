@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "note": "简易 eCRF 表单定义：字段类型驱动原生/网页表单渲染，rules 为跨字段逻辑核查（同 GxP-Workbench 的数据验证计划思想）。",
+  "forms": [
+    {
+      "id": "visit_vitals",
+      "title": "访视记录表（生命体征 · 给药 · 不良事件速查）",
+      "visitType": "V",
+      "intro": "本表模拟真实试验中最常见的访视记录表（eCRF）。填写时系统会做逻辑核查（必填、范围、跨字段矛盾），不通过则拒绝保存——这正是 CDMS 里 Edit Check 的作用。",
+      "fields": [
+        { "key": "visitDate", "label": "访视日期", "type": "date", "required": true, "hint": "实际完成访视的日期" },
+        { "key": "sbp", "label": "收缩压 (mmHg)", "type": "number", "required": true, "min": 60, "max": 220, "hint": "低于 60 或高于 220 属危急值，须记录 AE" },
+        { "key": "dbp", "label": "舒张压 (mmHg)", "type": "number", "required": true, "min": 30, "max": 140, "hint": "常见范围 60–90" },
+        { "key": "pulse", "label": "脉搏 (次/分)", "type": "number", "required": true, "min": 30, "max": 200 },
+        { "key": "temp", "label": "体温 (℃)", "type": "number", "required": true, "min": 34, "max": 42, "hint": "精确到 0.1" },
+        { "key": "doseTaken", "label": "本次访视前是否服药", "type": "select", "required": true, "options": ["yes", "no", "unknown"] },
+        { "key": "doseAmount", "label": "服药剂量 (mg)", "type": "number", "min": 0, "max": 1000, "hint": "未服药可留空" },
+        { "key": "aeOccurred", "label": "本次访视是否发生不良事件", "type": "select", "required": true, "options": ["no", "yes"] },
+        { "key": "aeDetail", "label": "不良事件描述", "type": "text", "hint": "发生 AE 时填写：症状、开始时间、严重程度、处理与转归" },
+        { "key": "comment", "label": "访视备注", "type": "text" }
+      ],
+      "rules": [
+        {
+          "left": "sbp",
+          "op": ">=",
+          "right": "dbp",
+          "message": "收缩压不应低于舒张压（跨字段逻辑矛盾，请核实录入）"
+        }
+      ]
+    },
+    {
+      "id": "screening_log",
+      "title": "筛选登记表（合格性判定速查）",
+      "visitType": "筛选",
+      "intro": "筛选期记录：入选/排除标准核对结果与筛选结论。教学重点——筛选失败必须留下原因，否则无法解释招募漏斗。",
+      "fields": [
+        { "key": "screenDate", "label": "筛选日期", "type": "date", "required": true },
+        { "key": "icfSigned", "label": "知情同意是否先于任何筛选操作", "type": "select", "required": true, "options": ["yes", "no"], "hint": "顺序错误属于关键方案偏离" },
+        { "key": "inclusionMet", "label": "入选标准是否全部满足", "type": "select", "required": true, "options": ["yes", "no"] },
+        { "key": "exclusionMet", "label": "排除标准是否存在命中", "type": "select", "required": true, "options": ["no", "yes"] },
+        { "key": "labOk", "label": "筛选期实验室检查是否合格", "type": "select", "required": true, "options": ["yes", "no", "pending"] },
+        { "key": "result", "label": "筛选结论", "type": "select", "required": true, "options": ["pass", "fail"], "hint": "fail 时必须在备注写明原因" },
+        { "key": "failReason", "label": "筛选失败原因", "type": "text", "hint": "如：肝功 ALT 超出方案允许上限" },
+        { "key": "note", "label": "备注", "type": "text" }
+      ],
+      "rules": []
+    }
+  ]
+}

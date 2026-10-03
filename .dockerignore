@@ -1,0 +1,12 @@
+node_modules
+data
+logs
+dist
+test
+.git
+.gitignore
+docs/screenshots
+desktop
+LeebertyCR.exe
+*.md
+!README.md

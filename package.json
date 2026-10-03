@@ -1,0 +1,38 @@
+{
+  "name": "leebertycr",
+  "version": "1.0.0",
+  "description": "LeebertyCR 临床试验工作台 - 辅助临床监查员(CRA)与临床协调员(CRC)理解并执行药物临床试验工作流程的本地化应用",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"test/unit/*.test.js\"",
+    "check": "node scripts/selfcheck.js",
+    "check:http": "node scripts/selfcheck.js --http",
+    "verify:audit": "node scripts/verify-audit.js",
+    "explore": "node scripts/explore.js",
+    "build:exe": "node scripts/build-exe.js",
+    "package": "node scripts/package.js",
+    "version:check": "node scripts/version-check.js",
+    "backup": "node scripts/backup.js"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "keywords": [
+    "CRA",
+    "CRC",
+    "clinical-research",
+    "GCP",
+    "ICH-E6",
+    "monitoring",
+    "site-management",
+    "trial-management",
+    "eTMF",
+    "eCRF",
+    "workbench"
+  ]
+}

@@ -1,0 +1,943 @@
+{
+  "title": "工作流库（配置驱动 · 参考 GxP-Workbench 引擎）",
+  "intro": "8 个可执行的具体工作流。每个流程是一条「受控记录 + 一串有角色门槛、部分需要签署确认的步骤」：新建记录 → 按步骤推进（系统检查你的当前身份是否被该步骤允许）→ 步骤完成后状态自动流转 → 全程留痕。签名步骤要求输入姓名并确认声明；「独立复核」步骤要求由与提出者不同身份的人执行（职责分离）。",
+  "roles": {
+    "cra": "CRA 临床监查员（申办者一方）",
+    "crc": "CRC 临床协调员（研究中心一方）",
+    "pi": "研究者（医学判断与最终责任）",
+    "qa": "QA/独立复核（质量保证，关闭与放行）"
+  },
+  "workflows": [
+    {
+      "code": "GCP-IC",
+      "recordPrefix": "IC",
+      "name": "知情同意与受试者权益事件",
+      "nameEn": "Informed Consent and Subject Rights Event",
+      "category": "study_event",
+      "gxpAreas": ["GCP"],
+      "regulationRefs": [
+        "ICH E6(R2) §4.8 - informed consent; §4.8.8 required elements",
+        "21 CFR 50.20 / 50.25 / 50.27 - consent requirements and documentation",
+        "NMPA GCP (2020) 第二十四条 - 知情同意要求",
+        "Declaration of Helsinki §25-32"
+      ],
+      "description": "记录并处理知情同意相关事件：签署晚于试验操作、要素缺失、版本未更新、重新同意遗漏、特殊情况（文盲/未成年人/紧急情况）保护不足等。涉及受试者权益，严重程度起点为 major。",
+      "slaDays": 10,
+      "requiresRootCause": true,
+      "requiresEffectivenessCheck": true,
+      "requiresQaApproval": true,
+      "criticalityLevels": ["major", "critical"],
+      "states": ["draft", "identified", "assessed", "reported", "capa_open", "closed", "cancelled"],
+      "initialState": "draft",
+      "terminalStates": ["closed", "cancelled"],
+      "fields": [
+        { "key": "title", "label": "事件标题", "type": "text", "required": true },
+        { "key": "summary", "label": "事件描述", "type": "textarea", "required": true },
+        { "key": "protocolNumber", "label": "试验方案编号及版本", "type": "text", "required": true },
+        { "key": "subjectId", "label": "受试者编号", "type": "text", "required": false, "help": "仅记录编号，本系统不存储受试者身份信息" },
+        { "key": "site", "label": "研究中心", "type": "text", "required": true },
+        { "key": "occurredAt", "label": "发生日期", "type": "date", "required": true },
+        { "key": "criticality", "label": "严重程度", "type": "select", "required": true, "options": ["major", "critical"], "help": "知情同意事件默认 major；若受试者已接受试验操作或涉及特殊人群，应为 critical" }
+      ],
+      "steps": [
+        {
+          "code": "identify",
+          "name": "识别与记录",
+          "nameEn": "Identification and recording",
+          "role": ["cra", "crc", "pi", "qa"],
+          "type": "task",
+          "onComplete": "identified",
+          "form": [
+            { "key": "eventType", "label": "事件类型", "type": "select", "required": true, "options": ["consent_after_procedure", "missing_required_element", "outdated_version_used", "reconsent_omitted", "no_witness_for_illiterate", "consent_not_documented", "subject_not_given_time", "vulnerable_subject", "icf_not_irb_approved", "other"] },
+            { "key": "factualAccount", "label": "事实描述（客观、可核查）", "type": "textarea", "required": true },
+            { "key": "consentDate", "label": "知情同意签署日期", "type": "date", "required": true },
+            { "key": "firstProcedureDate", "label": "首个试验相关操作日期", "type": "date", "required": true, "help": "含筛选检查；此日期必须晚于知情同意签署日期" },
+            { "key": "sourceDataRef", "label": "源数据引用", "type": "text", "required": false, "help": "病历页码、ICF 原件编号、门诊记录" }
+          ],
+          "guidance": "先判断事实，再谈责任：对比「ICF 签署日期」与「首个试验操作日期」是核查核心。筛选检查也属于试验操作——签署晚于筛选即为偏离。所有事实必须可核查（引用病历/文件位置），不得写推测。"
+        },
+        {
+          "code": "assess_impact",
+          "name": "受试者权益与数据影响评估",
+          "nameEn": "Subject rights & data impact assessment",
+          "role": ["pi", "cra", "qa"],
+          "type": "signature",
+          "signatureMeaning": "reviewed",
+          "onComplete": "assessed",
+          "requiresFields": ["subjectRightsImpact", "dataIntegrityImpact", "dataUseDecision", "overallImpact", "rootCause"],
+          "persistFields": { "impact_assessment": "overallImpact", "root_cause": "rootCause" },
+          "form": [
+            { "key": "subjectRightsImpact", "label": "对受试者权益与安全的影响", "type": "textarea", "required": true, "help": "受试者是否在充分知情前提下参与？是否经历了本可避免的检查或用药？" },
+            { "key": "dataIntegrityImpact", "label": "对数据完整性的影响", "type": "textarea", "required": true },
+            { "key": "dataUseDecision", "label": "该受试者数据的可用性判定", "type": "select", "required": true, "options": ["data_usable", "data_usable_with_sensitivity", "data_excluded", "irb_decision_required"] },
+            { "key": "subjectContinues", "label": "受试者是否继续参加", "type": "select", "required": true, "options": ["continues", "continues_with_monitoring", "withdrawn_by_subject", "withdrawn_by_investigator", "not_applicable"] },
+            { "key": "overallImpact", "label": "总体影响结论", "type": "textarea", "required": true },
+            { "key": "rootCause", "label": "根本原因", "type": "textarea", "required": true }
+          ],
+          "guidance": "知情同意的缺陷不能被「受试者表示理解」弥补——书面知情同意是法规要求。涉及特殊人群时，数据可用性判定可能需要伦理委员会参与，研究者不得单方决定。"
+        },
+        {
+          "code": "report",
+          "name": "报告与通报",
+          "nameEn": "Reporting and notification",
+          "role": ["pi", "cra", "qa"],
+          "type": "task",
+          "onComplete": "reported",
+          "requiresFields": ["irbNotified", "sponsorNotified"],
+          "form": [
+            { "key": "irbNotified", "label": "伦理委员会通报", "type": "select", "required": true, "options": ["yes", "no", "not_required"] },
+            { "key": "irbDate", "label": "伦理通报日期", "type": "date", "required": false },
+            { "key": "irbResponse", "label": "伦理意见要点", "type": "textarea", "required": false, "help": "是否要求重新知情同意、排除数据、提交进展报告" },
+            { "key": "sponsorNotified", "label": "申办者通报", "type": "select", "required": true, "options": ["yes", "no", "not_required"] },
+            { "key": "regulatoryNotified", "label": "监管机构通报", "type": "select", "required": true, "options": ["yes", "no", "assess_further"] },
+            { "key": "reconsentRequired", "label": "是否需要重新知情同意", "type": "select", "required": true, "options": ["yes_subject_specific", "yes_all_subjects", "no"] }
+          ],
+          "guidance": "知情同意类事件通常必须通报伦理委员会。若属系统性做法（如筛选流程设计问题），受影响的是全部受试者，必须排查，不能只当个例处理。"
+        },
+        {
+          "code": "capa",
+          "name": "纠正预防措施",
+          "nameEn": "Corrective & preventive action",
+          "role": ["pi", "cra", "qa", "crc"],
+          "type": "task",
+          "onComplete": "capa_open",
+          "requiresFields": ["correctiveActions", "preventiveActions", "capaOwner", "capaDueDate"],
+          "form": [
+            { "key": "correctiveActions", "label": "纠正措施（受试者层面）", "type": "textarea", "required": true, "help": "补充知情、重新同意、退出试验、医学随访" },
+            { "key": "preventiveActions", "label": "预防措施（流程层面）", "type": "textarea", "required": true, "help": "修订筛选流程图、增加 ICF 核查清单、系统强制拦截" },
+            { "key": "siteRetraining", "label": "研究中心再培训", "type": "select", "required": true, "options": ["yes", "no", "not_required"] },
+            { "key": "capaOwner", "label": "措施责任人", "type": "text", "required": true },
+            { "key": "capaDueDate", "label": "措施期限", "type": "date", "required": true }
+          ],
+          "guidance": "知情同意问题的预防措施通常落在流程与系统层面（访视顺序、系统质疑），仅重复培训通常不足以关闭。"
+        },
+        {
+          "code": "close",
+          "name": "关闭（独立复核）",
+          "nameEn": "Closure - independent review",
+          "role": ["qa", "pi"],
+          "type": "signature",
+          "signatureMeaning": "closed",
+          "onComplete": "closed",
+          "independentOfAuthor": true,
+          "requiresFields": ["conclusion", "effectivenessResult"],
+          "persistFields": { "effectiveness_result": "effectivenessResult" },
+          "form": [
+            { "key": "conclusion", "label": "关闭结论", "type": "textarea", "required": true },
+            { "key": "dataUseFinal", "label": "数据最终处理方式", "type": "select", "required": true, "options": ["included_in_analysis", "included_with_sensitivity", "excluded_from_analysis", "excluded_from_efficacy_only"] },
+            { "key": "effectivenessMethod", "label": "有效性检查方法", "type": "textarea", "required": true, "help": "如：后续 20 例 ICF 流程 100% 核对结果、下次监查专项核查" },
+            { "key": "effectivenessResult", "label": "有效性结论", "type": "select", "required": true, "options": ["effective", "partially_effective", "not_effective"] }
+          ],
+          "guidance": "本步骤要求独立复核（ICH Q10 §3.2 / Annex 11 §12.1）：事件的提出人不能自己关闭。若你当前身份与提出人相同，请切换到 QA 或研究者身份执行。ICH E3 要求临床研究报告列出所有重要偏离及其处理，不得因「已补救」而省略。"
+        }
+      ]
+    },
+    {
+      "code": "GCP-PD",
+      "recordPrefix": "PD",
+      "name": "临床试验方案偏离",
+      "nameEn": "Clinical Protocol Deviation",
+      "category": "study_event",
+      "gxpAreas": ["GCP"],
+      "regulationRefs": [
+        "ICH E6(R2) §4.5 - compliance with protocol; §4.5.4 deviations documented",
+        "ICH E6(R2) §5.18.4 - monitoring; §5.20 - deviation reporting",
+        "ICH E3 §9.2 - reporting of protocol deviations",
+        "NMPA GCP (2020) - 方案依从与偏离"
+      ],
+      "description": "记录、评估并报告偏离已批准试验方案的事件，区分重要偏离与一般偏离，判断对受试者安全与数据可靠性的影响，闭环整改。",
+      "slaDays": 14,
+      "requiresRootCause": true,
+      "requiresEffectivenessCheck": true,
+      "requiresQaApproval": true,
+      "criticalityLevels": ["minor", "major", "critical"],
+      "states": ["draft", "identified", "assessed", "reported", "capa_open", "closed", "cancelled"],
+      "initialState": "draft",
+      "terminalStates": ["closed", "cancelled"],
+      "fields": [
+        { "key": "title", "label": "偏离标题", "type": "text", "required": true },
+        { "key": "summary", "label": "偏离描述", "type": "textarea", "required": true },
+        { "key": "protocolNumber", "label": "试验方案编号及版本", "type": "text", "required": true },
+        { "key": "subjectId", "label": "受试者编号", "type": "text", "required": false, "help": "若为受试者相关偏离。本系统不存储受试者身份信息" },
+        { "key": "site", "label": "研究中心", "type": "text", "required": true },
+        { "key": "occurredAt", "label": "发生日期", "type": "date", "required": true },
+        { "key": "criticality", "label": "严重程度", "type": "select", "required": true, "options": ["minor", "major", "critical"] }
+      ],
+      "steps": [
+        {
+          "code": "identify",
+          "name": "识别与记录",
+          "nameEn": "Identification and recording",
+          "role": ["cra", "crc", "pi", "qa"],
+          "type": "task",
+          "onComplete": "identified",
+          "form": [
+            { "key": "deviationType", "label": "偏离类型", "type": "select", "required": true, "options": ["informed_consent", "inclusion_exclusion", "visit_window", "prohibited_medication", "study_procedure", "ip_handling", "randomisation", "blinding", "assessment_omitted", "safety_reporting", "other"] },
+            { "key": "protocolRequirement", "label": "方案要求原文（章节+内容）", "type": "textarea", "required": true, "help": "引用方案章节号及原文，便于核查" },
+            { "key": "actualConduct", "label": "实际执行情况", "type": "textarea", "required": true },
+            { "key": "discoveredBy", "label": "发现人及方式", "type": "text", "required": true, "help": "监查、稽查、自查、受试者反馈" },
+            { "key": "sourceDataRef", "label": "原始数据来源", "type": "text", "required": false, "help": "病历、检验报告、日记卡、药物发放记录" }
+          ],
+          "guidance": "所有方案偏离都必须记录，包括研究者主动报告的和监查发现的。不得因认为「不严重」而不记录——严重程度由评估步骤判定，不是提出人说了算。"
+        },
+        {
+          "code": "assess_impact",
+          "name": "影响评估",
+          "nameEn": "Impact assessment",
+          "role": ["pi", "cra", "qa"],
+          "type": "signature",
+          "signatureMeaning": "reviewed",
+          "onComplete": "assessed",
+          "requiresFields": ["importantDeviation", "subjectSafetyImpact", "dataIntegrityImpact", "overallImpact", "rootCause"],
+          "persistFields": { "impact_assessment": "overallImpact", "root_cause": "rootCause" },
+          "form": [
+            { "key": "importantDeviation", "label": "是否属于重要偏离", "type": "select", "required": true, "options": ["yes", "no"], "help": "重要偏离：可能显著影响受试者权益/安全/福祉，或试验数据的完整性与可靠性" },
+            { "key": "subjectSafetyImpact", "label": "对受试者安全的影响", "type": "textarea", "required": true },
+            { "key": "dataIntegrityImpact", "label": "对数据完整性的影响", "type": "textarea", "required": true },
+            { "key": "subjectContinues", "label": "受试者是否继续参加试验", "type": "select", "required": true, "options": ["continues", "continues_with_monitoring", "withdrawn", "not_applicable"] },
+            { "key": "overallImpact", "label": "总体影响结论", "type": "textarea", "required": true },
+            { "key": "rootCause", "label": "根本原因", "type": "textarea", "required": true }
+          ],
+          "guidance": "影响评估中受试者安全的医学判断必须由研究者做出。监查员不能代替研究者评估受试者安全。"
+        },
+        {
+          "code": "report",
+          "name": "报告与通报",
+          "nameEn": "Reporting and notification",
+          "role": ["pi", "cra", "qa"],
+          "type": "task",
+          "onComplete": "reported",
+          "requiresFields": ["irbNotified", "sponsorNotified"],
+          "form": [
+            { "key": "irbNotified", "label": "伦理委员会通报", "type": "select", "required": true, "options": ["yes", "no", "not_required"] },
+            { "key": "irbDate", "label": "通报日期", "type": "date", "required": false },
+            { "key": "sponsorNotified", "label": "申办者通报", "type": "select", "required": true, "options": ["yes", "no", "not_required"] },
+            { "key": "regulatoryNotified", "label": "监管机构通报", "type": "select", "required": true, "options": ["yes", "no", "not_required"], "help": "重要偏离可能需按当地法规报告" },
+            { "key": "protocolAmendmentNeeded", "label": "是否需要修订方案", "type": "select", "required": true, "options": ["yes", "no"] }
+          ],
+          "guidance": "重要偏离通常必须通报伦理委员会。是否报监管机构取决于当地法规与偏离性质。"
+        },
+        {
+          "code": "capa",
+          "name": "纠正预防措施",
+          "nameEn": "Corrective & preventive action",
+          "role": ["pi", "cra", "qa", "crc"],
+          "type": "task",
+          "onComplete": "capa_open",
+          "requiresFields": ["capaOwner", "capaDueDate"],
+          "form": [
+            { "key": "processChange", "label": "流程改进措施", "type": "textarea", "required": true },
+            { "key": "siteRetraining", "label": "研究中心再培训", "type": "select", "required": true, "options": ["yes", "no", "not_required"] },
+            { "key": "monitoringPlanChange", "label": "监查计划调整", "type": "textarea", "required": false, "help": "如：将该中心列为重点监查、增加现场访视频次" },
+            { "key": "capaOwner", "label": "措施责任人", "type": "text", "required": true },
+            { "key": "capaDueDate", "label": "措施期限", "type": "date", "required": true }
+          ],
+          "guidance": "反复发生的同类偏离说明培训或流程存在系统性问题，仅重复培训通常不足以关闭。"
+        },
+        {
+          "code": "close",
+          "name": "关闭（独立复核）",
+          "nameEn": "Closure - independent review",
+          "role": ["qa", "pi"],
+          "type": "signature",
+          "signatureMeaning": "closed",
+          "onComplete": "closed",
+          "independentOfAuthor": true,
+          "requiresFields": ["conclusion", "dataUsedInAnalysis"],
+          "persistFields": { "effectiveness_result": "dataUsedInAnalysis" },
+          "form": [
+            { "key": "conclusion", "label": "关闭结论", "type": "textarea", "required": true },
+            { "key": "dataUsedInAnalysis", "label": "受影响数据是否纳入分析", "type": "select", "required": true, "options": ["yes_all", "yes_sensitivity_analysis", "excluded", "per_protocol_definition"] },
+            { "key": "listedInReport", "label": "是否列入临床研究报告", "type": "select", "required": true, "options": ["yes", "no"] },
+            { "key": "effectivenessCheckDate", "label": "有效性检查日期", "type": "date", "required": false }
+          ],
+          "guidance": "ICH E3 要求临床研究报告必须列出所有重要方案偏离及其处理方式。本步骤要求独立复核：提出人不能自己关闭（Annex 11 §12.1）。"
+        }
+      ]
+    },
+    {
+      "code": "MON-CYCLE",
+      "recordPrefix": "MV",
+      "name": "监查访视闭环",
+      "nameEn": "Monitoring Visit Closure Cycle",
+      "category": "monitoring",
+      "gxpAreas": ["GCP"],
+      "regulationRefs": [
+        "ICH E6(R2) §5.18 - monitoring purpose; §5.18.4/5 - SDV and monitoring report",
+        "ICH E6(R2) §5.20 - deviation reporting"
+      ],
+      "description": "CRA 的核心日常闭环：访视计划 → 现场核对 → 问题与中心确认 → 随访信（正式发出）→ 中心整改 → 复核关闭。每一步都有产出，问题不闭环流程不结束。",
+      "slaDays": 30,
+      "requiresRootCause": false,
+      "requiresEffectivenessCheck": true,
+      "requiresQaApproval": false,
+      "criticalityLevels": ["minor", "major"],
+      "states": ["draft", "planned", "verified", "confirmed", "fu_sent", "remediated", "closed", "cancelled"],
+      "initialState": "draft",
+      "terminalStates": ["closed", "cancelled"],
+      "fields": [
+        { "key": "title", "label": "访视主题", "type": "text", "required": true, "help": "如：XX 中心 2026-05 常规监查" },
+        { "key": "summary", "label": "访视目的与重点", "type": "textarea", "required": true },
+        { "key": "protocolNumber", "label": "试验方案编号及版本", "type": "text", "required": true },
+        { "key": "site", "label": "研究中心", "type": "text", "required": true },
+        { "key": "visitDate", "label": "计划访视日期", "type": "date", "required": true },
+        { "key": "criticality", "label": "计划风险等级", "type": "select", "required": true, "options": ["minor", "major"], "help": "按监查计划/RBM：入组期、既往问题多的中心为 major" }
+      ],
+      "steps": [
+        {
+          "code": "plan",
+          "name": "访视计划与准备",
+          "nameEn": "Visit planning & preparation",
+          "role": ["cra"],
+          "type": "task",
+          "onComplete": "planned",
+          "requiresFields": ["lastOpenIssues", "sdvScope", "fileNeeds", "agendaSent"],
+          "form": [
+            { "key": "lastOpenIssues", "label": "上次遗留问题清单（编号+状态）", "type": "textarea", "required": true },
+            { "key": "sdvScope", "label": "本次 SDV 范围（受试者/条目，依据 SDRP）", "type": "textarea", "required": true },
+            { "key": "fileNeeds", "label": "需要中心准备的文件/病历", "type": "textarea", "required": true },
+            { "key": "agendaSent", "label": "议程与预约已通知中心", "type": "select", "required": true, "options": ["yes", "no"] }
+          ],
+          "guidance": "访视质量=访视前功课。先把上次遗留问题、EDC 质疑、SAE 状态、入组进度过一遍，带着清单去现场。"
+        },
+        {
+          "code": "verify",
+          "name": "现场监查与核对",
+          "nameEn": "On-site monitoring & verification",
+          "role": ["cra"],
+          "type": "task",
+          "onComplete": "verified",
+          "requiresFields": ["sdvDone", "icfChecked", "drugAccount", "saeStatus", "findingsCount"],
+          "form": [
+            { "key": "sdvDone", "label": "SDV 核对条目数/不一致数", "type": "text", "required": true },
+            { "key": "icfChecked", "label": "知情同意核查：版本/日期/要素", "type": "textarea", "required": true },
+            { "key": "drugAccount", "label": "药物账目核对结果", "type": "textarea", "required": true },
+            { "key": "saeStatus", "label": "SAE 报告核对结果", "type": "textarea", "required": true },
+            { "key": "isfGaps", "label": "ISF 缺口清单", "type": "textarea", "required": false },
+            { "key": "findingsCount", "label": "发现问题数（按重要/一般分列）", "type": "text", "required": true }
+          ],
+          "guidance": "现场核对的三根支柱：知情同意（权益）、SDV 双向核对（数据）、药物账目（盲态+安全）。发现的问题当场记录事实与证据位置，不靠记忆。"
+        },
+        {
+          "code": "confirm",
+          "name": "问题确认与沟通",
+          "nameEn": "Findings confirmation",
+          "role": ["crc", "pi"],
+          "type": "task",
+          "onComplete": "confirmed",
+          "requiresFields": ["findingsAcknowledged"],
+          "form": [
+            { "key": "findingsAcknowledged", "label": "中心是否确认问题清单", "type": "select", "required": true, "options": ["confirmed", "partially_confirmed", "disputed"] },
+            { "key": "siteComments", "label": "中心意见/解释", "type": "textarea", "required": false },
+            { "key": "clarified", "label": "当场已澄清/关闭的条目", "type": "textarea", "required": false }
+          ],
+          "guidance": "问题要与中心当面确认：有些「问题」其实是理解差异，当面澄清；确属问题的，记入随访信。此步由中心侧（CRC/研究者）回执，体现双向沟通。"
+        },
+        {
+          "code": "fu_letter",
+          "name": "发出随访信",
+          "nameEn": "Follow-up letter issued",
+          "role": ["cra"],
+          "type": "signature",
+          "signatureMeaning": "issued",
+          "onComplete": "fu_sent",
+          "requiresFields": ["fuContent", "fuDeadline"],
+          "form": [
+            { "key": "fuContent", "label": "随访信要点（问题→要求→责任人→期限）", "type": "textarea", "required": true },
+            { "key": "fuDeadline", "label": "中心整改回复期限", "type": "date", "required": true },
+            { "key": "sentTo", "label": "发送对象与方式", "type": "text", "required": true, "help": "研究者/CRC，邮件或书面" }
+          ],
+          "guidance": "随访信是问题闭环的正式起点：每条问题写清事实、整改要求、责任人、期限。签署后即视为正式发出。"
+        },
+        {
+          "code": "remediate",
+          "name": "中心整改落实",
+          "nameEn": "Site remediation",
+          "role": ["crc", "pi"],
+          "type": "task",
+          "onComplete": "remediated",
+          "requiresFields": ["remediationSummary"],
+          "form": [
+            { "key": "remediationSummary", "label": "整改完成情况（逐条对应随访信）", "type": "textarea", "required": true },
+            { "key": "remediationDate", "label": "整改完成日期", "type": "date", "required": true },
+            { "key": "evidenceRef", "label": "整改证据（文件/记录位置）", "type": "text", "required": true }
+          ],
+          "guidance": "整改必须留证据：培训记录、修订后的流程、补齐的文件。口头说「改好了」不算数。"
+        },
+        {
+          "code": "verify_close",
+          "name": "复核并关闭",
+          "nameEn": "Verification & closure",
+          "role": ["cra"],
+          "type": "signature",
+          "signatureMeaning": "verified",
+          "onComplete": "closed",
+          "requiresFields": ["verificationResult"],
+          "persistFields": { "effectiveness_result": "verificationResult" },
+          "form": [
+            { "key": "verificationResult", "label": "复核结论", "type": "select", "required": true, "options": ["effective", "partially_effective", "not_effective"] },
+            { "key": "verificationDetail", "label": "复核说明（核对了什么证据）", "type": "textarea", "required": true },
+            { "key": "carryover", "label": "未闭环事项（转入下个访视，如有）", "type": "textarea", "required": false }
+          ],
+          "guidance": "监查闭环的收尾：同一问题的「发现→整改→复核」三级证据齐了才关闭。未闭环事项必须转入下一轮——这就是监查计划的迭代输入。"
+        }
+      ]
+    },
+    {
+      "code": "SAE-TRACK",
+      "recordPrefix": "SAE",
+      "name": "SAE 上报与跟踪",
+      "nameEn": "SAE Reporting & Tracking",
+      "category": "safety",
+      "gxpAreas": ["GCP"],
+      "regulationRefs": [
+        "ICH E6(R2) §4.11 - safety reporting by investigator; §5.17 - expedited reporting",
+        "NMPA GCP (2020) 第四十五条 - SAE 上报时限",
+        "21 CFR 312.64(b) - investigator safety reports"
+      ],
+      "description": "严重不良事件（SAE）从获知到结案的全流程：初步判定 → 按时限上报申办者（常见 24h）→ 伦理通报 → 医学评估 → 随访报告 → 独立结案。",
+      "slaDays": 14,
+      "requiresRootCause": false,
+      "requiresEffectivenessCheck": false,
+      "requiresQaApproval": true,
+      "criticalityLevels": ["major", "critical"],
+      "states": ["draft", "notified", "sponsor_reported", "ethics_reported", "assessed", "followed", "closed", "cancelled"],
+      "initialState": "draft",
+      "terminalStates": ["closed", "cancelled"],
+      "fields": [
+        { "key": "title", "label": "SAE 标题", "type": "text", "required": true, "help": "如：SAE-递送事件名称/受试者编号" },
+        { "key": "summary", "label": "事件概要", "type": "textarea", "required": true },
+        { "key": "protocolNumber", "label": "试验方案编号及版本", "type": "text", "required": true },
+        { "key": "subjectId", "label": "受试者编号", "type": "text", "required": true },
+        { "key": "site", "label": "研究中心", "type": "text", "required": true },
+        { "key": "occurredAt", "label": "事件发生日期", "type": "date", "required": true },
+        { "key": "criticality", "label": "严重程度", "type": "select", "required": true, "options": ["major", "critical"] }
+      ],
+      "steps": [
+        {
+          "code": "notify",
+          "name": "获知与初步判定",
+          "nameEn": "Awareness & initial assessment",
+          "role": ["crc", "pi"],
+          "type": "task",
+          "onComplete": "notified",
+          "requiresFields": ["awarenessAt", "isSAE"],
+          "form": [
+            { "key": "awarenessAt", "label": "获知日期时间", "type": "text", "required": true, "help": "时间从获知起算，格式：YYYY-MM-DD HH:mm" },
+            { "key": "howAware", "label": "获知途径", "type": "select", "required": true, "options": ["subject_call", "visit", "hospital_stay", "lab", "other"] },
+            { "key": "isSAE", "label": "是否符合方案 SAE 定义", "type": "select", "required": true, "options": ["yes", "no_not_sae", "unclear_ask_sponsor"] },
+            { "key": "piNotified", "label": "研究者已获知", "type": "select", "required": true, "options": ["yes", "no"] },
+            { "key": "initialRecord", "label": "初步记录位置（病历/报告）", "type": "text", "required": true }
+          ],
+          "guidance": "「获知」那一刻时限就开始计时。受试者电话、访视、住院、异常化验——任何途径获知都算。先通知研究者，再走报告流程；记录先于报告。"
+        },
+        {
+          "code": "report_sponsor",
+          "name": "上报申办者（按时限）",
+          "nameEn": "Sponsor notification (timely)",
+          "role": ["crc", "pi"],
+          "type": "task",
+          "onComplete": "sponsor_reported",
+          "requiresFields": ["reportTime", "reportMethod"],
+          "form": [
+            { "key": "reportTime", "label": "上报日期时间", "type": "text", "required": true },
+            { "key": "reportMethod", "label": "上报方式", "type": "select", "required": true, "options": ["edc_safety_form", "email", "phone_followed_written", "fax", "other"] },
+            { "key": "reportNo", "label": "报告编号（申办者分配，如有）", "type": "text", "required": false },
+            { "key": "withinDeadline", "label": "是否在方案时限内（常见 24h）", "type": "select", "required": true, "options": ["yes", "no_delayed", "deadline_per_protocol"] }
+          ],
+          "guidance": "时限以方案为准（中国 GCP 2020：研究者获知后 24 小时内报告申办者）。超时报本身就是一个缺陷，要记录并在后续评估中说明原因。"
+        },
+        {
+          "code": "report_ethics",
+          "name": "伦理通报与机构沟通",
+          "nameEn": "IRB notification",
+          "role": ["crc", "pi", "qa"],
+          "type": "task",
+          "onComplete": "ethics_reported",
+          "requiresFields": ["ethicsNotified"],
+          "form": [
+            { "key": "ethicsNotified", "label": "伦理委员会已通报", "type": "select", "required": true, "options": ["yes", "no", "deadline_pending"] },
+            { "key": "ethicsDate", "label": "通报日期", "type": "date", "required": false },
+            { "key": "siteNotified", "label": "机构相关方已沟通", "type": "select", "required": true, "options": ["yes", "no", "not_required"] }
+          ],
+          "guidance": "伦理上报要求以伦理委员会规定与方案为准——有的 SAE 需要立即报，有的按定期汇总报。中心侧上报义务不能只依赖申办者。"
+        },
+        {
+          "code": "medical_assess",
+          "name": "医学评估",
+          "nameEn": "Medical assessment",
+          "role": ["pi"],
+          "type": "signature",
+          "signatureMeaning": "assessed",
+          "onComplete": "assessed",
+          "requiresFields": ["causality", "severity", "outcome"],
+          "form": [
+            { "key": "causality", "label": "与试验药关系判定", "type": "select", "required": true, "options": ["certain", "probable", "possible", "unlikely", "unrelated", "unassessable"] },
+            { "key": "severity", "label": "严重度分级", "type": "select", "required": true, "options": ["mild", "moderate", "severe"] },
+            { "key": "outcome", "label": "当前转归", "type": "select", "required": true, "options": ["recovered", "recovering", "ongoing", "sequelae", "death", "unknown"] },
+            { "key": "treatment", "label": "处理措施", "type": "textarea", "required": true }
+          ],
+          "guidance": "因果关系与医疗处理判定是研究者的医学职责，CRC/CRA 不代替判断。此步需要研究者签署。"
+        },
+        {
+          "code": "followup",
+          "name": "随访报告直至转归",
+          "nameEn": "Follow-up until outcome",
+          "role": ["crc", "pi"],
+          "type": "task",
+          "onComplete": "followed",
+          "requiresFields": ["followupStatus"],
+          "form": [
+            { "key": "followupStatus", "label": "随访进展", "type": "textarea", "required": true },
+            { "key": "followupsSent", "label": "已提交的随访报告数", "type": "text", "required": true },
+            { "key": "resolved", "label": "转归是否明确", "type": "select", "required": true, "options": ["yes", "no_ongoing"] }
+          ],
+          "guidance": "SAE 未转归，报告就没结束。随访报告按申办者/方案要求持续提交，直到转归明确（恢复/后遗/死亡）。"
+        },
+        {
+          "code": "close",
+          "name": "结案（独立复核）",
+          "nameEn": "Closure - independent review",
+          "role": ["qa", "pi"],
+          "type": "signature",
+          "signatureMeaning": "closed",
+          "onComplete": "closed",
+          "independentOfAuthor": true,
+          "requiresFields": ["closeConclusion"],
+          "form": [
+            { "key": "closeConclusion", "label": "结案结论", "type": "textarea", "required": true },
+            { "key": "reportChainComplete", "label": "报告链完整性确认", "type": "select", "required": true, "options": ["complete", "gap_documented"] },
+            { "key": "lessons", "label": "值得改进的环节", "type": "textarea", "required": false }
+          ],
+          "guidance": "结案前确认：上报链完整、随访结束、病历与报告一致。独立复核原则：由非事件提出人身份执行。"
+        }
+      ]
+    },
+    {
+      "code": "IP-TEMP",
+      "recordPrefix": "IPT",
+      "name": "试验药物温度偏差/账实差异",
+      "nameEn": "IP Temperature / Accountability Issue",
+      "category": "ip_management",
+      "gxpAreas": ["GCP", "GMP"],
+      "regulationRefs": [
+        "ICH E6(R2) §5.13/5.14 - IP handling and accountability",
+        "NMPA GCP (2020) 第五十条 - 试验用药品管理",
+        "21 CFR 312.62 - drug disposition records"
+      ],
+      "description": "试验药物的温度超范围、账实不符等事件：发现并隔离 → 影响评估 → 申办者处置决定 → 纠正预防 → 独立关闭。药物问题不掩饰，账目差异必查清。",
+      "slaDays": 10,
+      "requiresRootCause": true,
+      "requiresEffectivenessCheck": true,
+      "requiresQaApproval": true,
+      "criticalityLevels": ["major", "critical"],
+      "states": ["draft", "isolated", "assessed", "decided", "capa_open", "closed", "cancelled"],
+      "initialState": "draft",
+      "terminalStates": ["closed", "cancelled"],
+      "fields": [
+        { "key": "title", "label": "问题标题", "type": "text", "required": true, "help": "如：药柜温度超限（30℃）事件 / 账实差异 2 盒" },
+        { "key": "summary", "label": "问题描述", "type": "textarea", "required": true },
+        { "key": "protocolNumber", "label": "试验方案编号及版本", "type": "text", "required": true },
+        { "key": "site", "label": "研究中心", "type": "text", "required": true },
+        { "key": "occurredAt", "label": "发现日期", "type": "date", "required": true },
+        { "key": "criticality", "label": "严重程度", "type": "select", "required": true, "options": ["major", "critical"], "help": "涉及盲态破盲或已发放患者用药超出储存条件为 critical" }
+      ],
+      "steps": [
+        {
+          "code": "discover",
+          "name": "发现与即时隔离",
+          "nameEn": "Discovery & immediate containment",
+          "role": ["crc", "pi", "cra"],
+          "type": "task",
+          "onComplete": "isolated",
+          "requiresFields": ["immediateAction", "affectedBatches"],
+          "form": [
+            { "key": "eventType", "label": "事件类型", "type": "select", "required": true, "options": ["temperature_excursion", "accounting_gap", "damaged_pack", "expired_stock", "shipment_issue", "other"] },
+            { "key": "immediateAction", "label": "即时措施（隔离/停发/上报）", "type": "textarea", "required": true },
+            { "key": "affectedBatches", "label": "受影响批次/数量/涉及受试者", "type": "textarea", "required": true },
+            { "key": "evidence", "label": "证据（温度记录/盘点表/照片编号）", "type": "text", "required": true }
+          ],
+          "guidance": "第一时间：隔离受影响药品、停止发放、如实记录。禁止「自行把温度记录填了」——掩饰会让小事件变成数据完整性事故。"
+        },
+        {
+          "code": "assess",
+          "name": "影响评估",
+          "nameEn": "Impact assessment",
+          "role": ["pi", "qa"],
+          "type": "signature",
+          "signatureMeaning": "reviewed",
+          "onComplete": "assessed",
+          "requiresFields": ["impact", "rootCause"],
+          "persistFields": { "impact_assessment": "impact", "root_cause": "rootCause" },
+          "form": [
+            { "key": "impact", "label": "影响评估（储存暴露/使用情况/患者风险）", "type": "textarea", "required": true },
+            { "key": "rootCause", "label": "根本原因", "type": "textarea", "required": true },
+            { "key": "sponsorContacted", "label": "是否已联系申办者质量部门", "type": "select", "required": true, "options": ["yes", "no"] }
+          ],
+          "guidance": "温度超限的处置判定通常需要申办者质量部门依据稳定性数据决定，研究中心不得单方决定「应该没问题继续用」。"
+        },
+        {
+          "code": "decide",
+          "name": "申办者处置决定",
+          "nameEn": "Sponsor disposition decision",
+          "role": ["cra", "qa"],
+          "type": "task",
+          "onComplete": "decided",
+          "requiresFields": ["decision"],
+          "form": [
+            { "key": "decision", "label": "处置决定", "type": "select", "required": true, "options": ["continue_use", "quarantine_replace", "recall_and_replace", "destroy", "pending_stability"] },
+            { "key": "decisionBasis", "label": "决定依据（稳定性数据/SOP）", "type": "textarea", "required": true },
+            { "key": "decisionRef", "label": "决定文件编号", "type": "text", "required": false }
+          ],
+          "guidance": "处置决定要书面留痕：决策方、依据（稳定性数据等）、文件编号。口头决定不算数。"
+        },
+        {
+          "code": "capa",
+          "name": "纠正预防措施",
+          "nameEn": "Corrective & preventive action",
+          "role": ["crc", "pi", "qa", "cra"],
+          "type": "task",
+          "onComplete": "capa_open",
+          "requiresFields": ["capaActions", "capaOwner", "capaDueDate"],
+          "form": [
+            { "key": "capaActions", "label": "纠正与预防措施", "type": "textarea", "required": true, "help": "如：更换温控设备、双人盘点流程、温度报警即时响应机制" },
+            { "key": "capaOwner", "label": "措施责任人", "type": "text", "required": true },
+            { "key": "capaDueDate", "label": "措施期限", "type": "date", "required": true }
+          ],
+          "guidance": "预防措施重点是流程：报警响应机制、双人核对、搬运登记。单次事件处罚不是 CAPA。"
+        },
+        {
+          "code": "close",
+          "name": "关闭（独立复核）",
+          "nameEn": "Closure - independent review",
+          "role": ["qa", "pi"],
+          "type": "signature",
+          "signatureMeaning": "closed",
+          "onComplete": "closed",
+          "independentOfAuthor": true,
+          "requiresFields": ["conclusion", "effectivenessResult"],
+          "persistFields": { "effectiveness_result": "effectivenessResult" },
+          "form": [
+            { "key": "conclusion", "label": "关闭结论", "type": "textarea", "required": true },
+            { "key": "accountBalanced", "label": "账目是否已平衡", "type": "select", "required": true, "options": ["yes", "no_documented_gap"] },
+            { "key": "effectivenessMethod", "label": "有效性检查方法", "type": "textarea", "required": true },
+            { "key": "effectivenessResult", "label": "有效性结论", "type": "select", "required": true, "options": ["effective", "partially_effective", "not_effective"] }
+          ],
+          "guidance": "账目问题必须以「账实平衡或差异有书面解释」为前提关闭；温度问题必须以处置决定与随访检查结果为前提。独立复核关闭。"
+        }
+      ]
+    },
+    {
+      "code": "SITE-OPEN",
+      "recordPrefix": "SO",
+      "name": "中心启动流程",
+      "nameEn": "Site Initiation Workflow",
+      "category": "site_lifecycle",
+      "gxpAreas": ["GCP"],
+      "regulationRefs": [
+        "ICH E6(R2) §4.1/4.2 - investigator qualification & delegation",
+        "ICH E6(R2) §8 - essential documents"
+      ],
+      "description": "中心正式启动的门禁流程：启动前准备 → 培训与授权 → 必备文件核对 → 药物物资到位 → 独立放行。批件、授权、培训、药品四件套齐了才允许入组。",
+      "slaDays": 30,
+      "requiresRootCause": false,
+      "requiresEffectivenessCheck": false,
+      "requiresQaApproval": true,
+      "criticalityLevels": ["minor", "major"],
+      "states": ["draft", "prepared", "trained", "files_ok", "stocked", "opened", "cancelled"],
+      "initialState": "draft",
+      "terminalStates": ["opened", "cancelled"],
+      "fields": [
+        { "key": "title", "label": "启动主题", "type": "text", "required": true, "help": "如：XX 中心启动 - 降糖药 III 期" },
+        { "key": "summary", "label": "启动概述", "type": "textarea", "required": true },
+        { "key": "protocolNumber", "label": "试验方案编号及版本", "type": "text", "required": true },
+        { "key": "site", "label": "研究中心", "type": "text", "required": true },
+        { "key": "sivDate", "label": "计划启动会日期", "type": "date", "required": true },
+        { "key": "criticality", "label": "风险等级", "type": "select", "required": true, "options": ["minor", "major"], "help": "新中心/新研究者/复杂方案为 major" }
+      ],
+      "steps": [
+        {
+          "code": "prepare",
+          "name": "启动前准备",
+          "nameEn": "Pre-SIV preparation",
+          "role": ["cra", "crc"],
+          "type": "task",
+          "onComplete": "prepared",
+          "requiresFields": ["ethicsApproved", "contractSigned"],
+          "form": [
+            { "key": "ethicsApproved", "label": "伦理批件（日期+版本）", "type": "text", "required": true },
+            { "key": "contractSigned", "label": "临床协议已签署", "type": "select", "required": true, "options": ["yes", "no"] },
+            { "key": "agendaReady", "label": "启动议程/培训材料已备", "type": "select", "required": true, "options": ["yes", "no"] },
+            { "key": "teamInvited", "label": "研究者团队参会确认", "type": "textarea", "required": true }
+          ],
+          "guidance": "启动前置条件缺一不可：批件早于一切操作、合同签署。批件没下来就培训叫「预启动」，不得入组。"
+        },
+        {
+          "code": "train",
+          "name": "培训与授权",
+          "nameEn": "Training & delegation",
+          "role": ["cra"],
+          "type": "task",
+          "onComplete": "trained",
+          "requiresFields": ["trainedWho", "delegationSigned"],
+          "form": [
+            { "key": "trainedWho", "label": "参与培训人员（签到表核对）", "type": "textarea", "required": true },
+            { "key": "topicsCovered", "label": "培训主题（方案/eCRF/SAE/药物）", "type": "textarea", "required": true },
+            { "key": "delegationSigned", "label": "授权分工表已签署", "type": "select", "required": true, "options": ["yes", "no"] },
+            { "key": "trainingRecord", "label": "培训记录归档位置", "type": "text", "required": true }
+          ],
+          "guidance": "培训对象与授权表一一对应：签字的人必须是干活的人。研究者本人必须参加——会后补发 PPT 不算培训。"
+        },
+        {
+          "code": "files",
+          "name": "必备文件核对",
+          "nameEn": "Essential documents check",
+          "role": ["cra"],
+          "type": "signature",
+          "signatureMeaning": "verified",
+          "onComplete": "files_ok",
+          "requiresFields": ["fileCheckResult"],
+          "form": [
+            { "key": "fileCheckResult", "label": "核对结果（按必备文件清单）", "type": "textarea", "required": true },
+            { "key": "fileGaps", "label": "缺口及补齐期限", "type": "textarea", "required": false },
+            { "key": "isfReady", "label": "ISF 目录已建立", "type": "select", "required": true, "options": ["yes", "no"] }
+          ],
+          "guidance": "批件日期、版本号、签名逐项真核对，不是打勾了事。缺口列出责任人+期限，写入启动报告。"
+        },
+        {
+          "code": "stock",
+          "name": "药物与物资到位",
+          "nameEn": "IP & supplies on site",
+          "role": ["crc", "cra"],
+          "type": "task",
+          "onComplete": "stocked",
+          "requiresFields": ["drugReceived", "storageOk"],
+          "form": [
+            { "key": "drugReceived", "label": "药物签收与数量核对", "type": "text", "required": true },
+            { "key": "storageOk", "label": "储存条件与温度计校准", "type": "select", "required": true, "options": ["ok", "issue_documented"] },
+            { "key": "suppliesReady", "label": "研究物资/EDC 账号就绪", "type": "textarea", "required": true },
+            { "key": "blindnessMaterials", "label": "盲态材料保管安排（如适用）", "type": "text", "required": false }
+          ],
+          "guidance": "药物账目起点在签收那一刻：随货清单、批号、数量当场核对。温度记录从药物入库第一分钟开始。"
+        },
+        {
+          "code": "release",
+          "name": "启动放行（独立复核）",
+          "nameEn": "Release to enrollment - independent",
+          "role": ["qa", "pi"],
+          "type": "signature",
+          "signatureMeaning": "approved",
+          "onComplete": "opened",
+          "independentOfAuthor": true,
+          "requiresFields": ["releaseConclusion"],
+          "form": [
+            { "key": "releaseConclusion", "label": "放行结论（具备入组条件的确认）", "type": "textarea", "required": true },
+            { "key": "releaseDate", "label": "正式启动日期", "type": "date", "required": true },
+            { "key": "conditions", "label": "附带条件（如有）", "type": "textarea", "required": false }
+          ],
+          "guidance": "放行 = 正式宣布中心可以开始入组。由独立于启动组织方的人（QA 或研究者）签署，形成「四件套齐+独立放行」的证据链。"
+        }
+      ]
+    },
+    {
+      "code": "SITE-CLOSE",
+      "recordPrefix": "SC",
+      "name": "中心关闭流程",
+      "nameEn": "Site Close-out Workflow",
+      "category": "site_lifecycle",
+      "gxpAreas": ["GCP"],
+      "regulationRefs": [
+        "ICH E6(R2) §4.13 - premature termination; §5.20 - early termination",
+        "ICH E6(R2) §8 - essential documents after trial",
+        "NMPA GCP (2020) 第三十三条 - 文件保存"
+      ],
+      "description": "试验在中心的收尾门禁：数据清理与签认 → 药物回收账目 → 文件终核与归档安排 → 独立确认关闭。善始善终靠清单，不靠记忆。",
+      "slaDays": 30,
+      "requiresRootCause": false,
+      "requiresEffectivenessCheck": false,
+      "requiresQaApproval": true,
+      "criticalityLevels": ["minor", "major"],
+      "states": ["draft", "cleaned", "drugs_returned", "files_done", "closed", "cancelled"],
+      "initialState": "draft",
+      "terminalStates": ["closed", "cancelled"],
+      "fields": [
+        { "key": "title", "label": "关闭主题", "type": "text", "required": true, "help": "如：XX 中心关闭访视" },
+        { "key": "summary", "label": "关闭概述（试验阶段、入组数）", "type": "textarea", "required": true },
+        { "key": "protocolNumber", "label": "试验方案编号及版本", "type": "text", "required": true },
+        { "key": "site", "label": "研究中心", "type": "text", "required": true },
+        { "key": "covDate", "label": "计划关闭访视日期", "type": "date", "required": true },
+        { "key": "criticality", "label": "风险等级", "type": "select", "required": true, "options": ["minor", "major"] }
+      ],
+      "steps": [
+        {
+          "code": "clean",
+          "name": "数据清理与研究者签认",
+          "nameEn": "Data cleaning & sign-off",
+          "role": ["cra", "crc"],
+          "type": "task",
+          "onComplete": "cleaned",
+          "requiresFields": ["dataStatus"],
+          "form": [
+            { "key": "dataStatus", "label": "数据状态（质疑数/未清项）", "type": "textarea", "required": true },
+            { "key": "investigatorSigned", "label": "研究者 eCRF 签认完成", "type": "select", "required": true, "options": ["yes", "no"] },
+            { "key": "saeFollowup", "label": "SAE 随访责任安排", "type": "textarea", "required": true }
+          ],
+          "guidance": "数据没清干净不进入关闭流程：质疑清零、研究者签认、SAE 随访责任落实到人。"
+        },
+        {
+          "code": "drugs",
+          "name": "药物回收与账目终核",
+          "nameEn": "IP return & final accountability",
+          "role": ["crc", "cra"],
+          "type": "task",
+          "onComplete": "drugs_returned",
+          "requiresFields": ["accountResult"],
+          "form": [
+            { "key": "accountResult", "label": "账目终核（接收=发放+回收+剩余+销毁）", "type": "textarea", "required": true },
+            { "key": "returnedQty", "label": "回收数量/批号", "type": "text", "required": true },
+            { "key": "blindMaterials", "label": "盲态材料回收与封存（如适用）", "type": "text", "required": false }
+          ],
+          "guidance": "药物账目最后一道闸：逐瓶核对编号与数量。盲态药物更不能含糊——差异要在中心内查清，不能「先关闭后处理」。"
+        },
+        {
+          "code": "files",
+          "name": "文件终核与归档安排",
+          "nameEn": "File final check & archiving",
+          "role": ["crc", "cra"],
+          "type": "task",
+          "onComplete": "files_done",
+          "requiresFields": ["fileStatus"],
+          "form": [
+            { "key": "fileStatus", "label": "必备文件终核结果", "type": "textarea", "required": true },
+            { "key": "archivePlan", "label": "归档安排（地点/责任人/保存期限）", "type": "textarea", "required": true },
+            { "key": "access", "label": "未来调取联系人", "type": "text", "required": true }
+          ],
+          "guidance": "文件终核要「缺什么列什么」；归档期限书面写明（中国 GCP 一般保存至试验结束后至少 5 年，以法规与协议为准）。人走了文件不能散。"
+        },
+        {
+          "code": "confirm",
+          "name": "关闭确认（独立复核）",
+          "nameEn": "Close-out confirmation - independent",
+          "role": ["qa", "pi"],
+          "type": "signature",
+          "signatureMeaning": "approved",
+          "onComplete": "closed",
+          "independentOfAuthor": true,
+          "requiresFields": ["confirmation"],
+          "form": [
+            { "key": "confirmation", "label": "关闭确认结论", "type": "textarea", "required": true },
+            { "key": "subjectContinuity", "label": "受试者后续医疗/随访责任确认", "type": "textarea", "required": true },
+            { "key": "openItems", "label": "遗留事项与处理安排（如有）", "type": "textarea", "required": false }
+          ],
+          "guidance": "关闭确认 = 书面终止声明：数据、药物、文件、受试者后续安排四件事全部落定。独立复核关闭。"
+        }
+      ]
+    },
+    {
+      "code": "QUERY-DATA",
+      "recordPrefix": "QR",
+      "name": "数据质疑闭环",
+      "nameEn": "Data Query Closure Loop",
+      "category": "data_management",
+      "gxpAreas": ["GCP"],
+      "regulationRefs": [
+        "ICH E6(R2) §5.5 - data handling; §4.9 - source data",
+        "NMPA GCP (2020) 第八章 - 数据管理",
+        "ALCOA+ - 数据完整性"
+      ],
+      "description": "EDC 质疑（query）从接收、回源核对、答复/修正、研究者确认到关闭的闭环。质疑是数据质量的探针：答复必须挂在源数据上。",
+      "slaDays": 7,
+      "requiresRootCause": false,
+      "requiresEffectivenessCheck": false,
+      "requiresQaApproval": false,
+      "criticalityLevels": ["minor", "major"],
+      "states": ["draft", "received", "verified", "answered", "reviewed", "closed", "cancelled"],
+      "initialState": "draft",
+      "terminalStates": ["closed", "cancelled"],
+      "fields": [
+        { "key": "title", "label": "质疑主题", "type": "text", "required": true, "help": "如：受试者 1003 第 6 访视血压数据矛盾" },
+        { "key": "summary", "label": "质疑内容（系统原话）", "type": "textarea", "required": true },
+        { "key": "protocolNumber", "label": "试验方案编号及版本", "type": "text", "required": true },
+        { "key": "subjectId", "label": "受试者编号", "type": "text", "required": true },
+        { "key": "site", "label": "研究中心", "type": "text", "required": true },
+        { "key": "queryNo", "label": "质疑编号（EDC 中）", "type": "text", "required": true },
+        { "key": "criticality", "label": "优先级", "type": "select", "required": true, "options": ["minor", "major"], "help": "涉及安全性/终点数据为 major" }
+      ],
+      "steps": [
+        {
+          "code": "receive",
+          "name": "接收与登记",
+          "nameEn": "Receipt & registration",
+          "role": ["crc", "cra"],
+          "type": "task",
+          "onComplete": "received",
+          "form": [
+            { "key": "sourceField", "label": "涉及页面/字段", "type": "text", "required": true },
+            { "key": "queryType", "label": "质疑类型", "type": "select", "required": true, "options": ["missing_data", "out_of_range", "inconsistent", "typo", "unclear_entry", "logic_check", "other"] },
+            { "key": "priorityNote", "label": "时效要求（是否有答复期限）", "type": "text", "required": true }
+          ],
+          "guidance": "质疑收到即登记：编号、字段、类型、期限。积压到锁库前突击处理=答复质量崩盘的标准剧本。"
+        },
+        {
+          "code": "verify_source",
+          "name": "回源数据核对",
+          "nameEn": "Source verification",
+          "role": ["crc"],
+          "type": "task",
+          "onComplete": "verified",
+          "requiresFields": ["sourceFinding"],
+          "form": [
+            { "key": "sourceFinding", "label": "源数据核对结论（病历/报告位置与记录）", "type": "textarea", "required": true },
+            { "key": "discrepancy", "label": "差异类型", "type": "select", "required": true, "options": ["entry_error", "source_missing", "source_error", "no_error_clarify", "other"] }
+          ],
+          "guidance": "答复前必做：找到源数据位置、记录原始内容。三种情况分开处理：录入错=走修正流程；源数据缺=先补源数据；都没错=如实澄清。"
+        },
+        {
+          "code": "answer",
+          "name": "答复或修正",
+          "nameEn": "Answer or correction",
+          "role": ["crc"],
+          "type": "task",
+          "onComplete": "answered",
+          "requiresFields": ["answerText", "correctionNote"],
+          "form": [
+            { "key": "answerText", "label": "答复内容（附源数据引用）", "type": "textarea", "required": true },
+            { "key": "correctionNote", "label": "修正说明（如涉及数据修正：改了什么、谁、为什么）", "type": "textarea", "required": true },
+            { "key": "correctionTrail", "label": "修正留痕（审计日志/修改记录位置）", "type": "text", "required": false }
+          ],
+          "guidance": "「无依据的答复」是二次造假：宁可如实说明「需要时间核对」，也不填一个看起来像答案的答案。修正必须走系统留痕。"
+        },
+        {
+          "code": "review",
+          "name": "研究者确认",
+          "nameEn": "Investigator confirmation",
+          "role": ["pi"],
+          "type": "signature",
+          "signatureMeaning": "confirmed",
+          "onComplete": "reviewed",
+          "requiresFields": ["reviewNote"],
+          "form": [
+            { "key": "reviewNote", "label": "研究者确认意见", "type": "textarea", "required": true },
+            { "key": "medicalData", "label": "是否涉及医学判定数据", "type": "select", "required": true, "options": ["yes", "no"] }
+          ],
+          "guidance": "涉及医学内容（AE、疗效、异常值）的答复必须由研究者确认——CRC 不能替研究者确认医学数据。"
+        },
+        {
+          "code": "close",
+          "name": "质疑关闭与复盘",
+          "nameEn": "Closure & review",
+          "role": ["crc", "pi", "cra"],
+          "type": "task",
+          "onComplete": "closed",
+          "requiresFields": ["closeNote"],
+          "form": [
+            { "key": "closeNote", "label": "关闭确认（EDC 中状态）", "type": "textarea", "required": true },
+            { "key": "pattern", "label": "同类质疑是否反复出现", "type": "select", "required": true, "options": ["no", "yes_recurring"] },
+            { "key": "trainingHint", "label": "是否需要录入培训/流程改进", "type": "select", "required": true, "options": ["no", "yes_short_training", "yes_process_change"] }
+          ],
+          "guidance": "关闭不等于结束：同类质疑反复出现=录入习惯或流程问题，反馈给培训和 CRA 监查重点。单条关闭无复盘，质疑就会换个问法再来。"
+        }
+      ]
+    }
+  ]
+}
